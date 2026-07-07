@@ -24,7 +24,7 @@ Para poder compilar y cargar los diseños en la FPGA desde Ubuntu, realiza los s
 Abre una terminal y ejecuta el siguiente comando para instalar las herramientas necesarias:
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-pip openfpgaloader
+sudo apt install openfpgaloader
 ```
 > [!NOTE]
 > `openFPGALoader` es una herramienta de código abierto muy útil en Linux para programar FPGAs de diversas marcas, incluyendo Gowin.
