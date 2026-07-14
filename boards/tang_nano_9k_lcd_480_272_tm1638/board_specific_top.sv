@@ -104,7 +104,15 @@ module board_specific_top
     output                       FLASH_CLK,
     output                       FLASH_CSB,
     output                       FLASH_MOSI,
-    input                        FLASH_MISO
+    input                        FLASH_MISO,
+
+    // Pines Físicos de la PSRAM (SiP interno del GW1NR-9)
+    output [1:0]                 O_psram_ck,
+    output [1:0]                 O_psram_ck_n,
+    inout  [1:0]                 IO_psram_rwds,
+    inout  [15:0]                IO_psram_dq,
+    output [1:0]                 O_psram_reset_n,
+    output [1:0]                 O_psram_cs_n
 );
 
     wire clk = CLK;
@@ -260,7 +268,25 @@ module board_specific_top
             .gpio          ( `USER_GPIO    ),
             
             .uart_rx       ( UART_RX       ),
-            .uart_tx       ( UART_TX       )
+            .uart_tx       ( UART_TX       ),
+
+            // SD Card
+            .sd_cs         ( TF_CS         ),
+            .sd_sclk       ( TF_SCLK       ),
+            .sd_mosi       ( TF_MOSI       ),
+            .sd_miso       ( TF_MISO       ),
+
+            // PSRAM internal pins
+            .O_psram_ck      ( O_psram_ck      ),
+            .O_psram_ck_n    ( O_psram_ck_n    ),
+            .IO_psram_rwds   ( IO_psram_rwds   ),
+            .IO_psram_dq     ( IO_psram_dq     ),
+            .O_psram_reset_n ( O_psram_reset_n ),
+            .O_psram_cs_n    ( O_psram_cs_n    ),
+
+            // Reloj de pixeles y señales de sincronización
+            .lcd_clock     ( LARGE_LCD_CK  ),
+            .lcd_de        ( LARGE_LCD_DE  )
         );
 
     `else
@@ -409,7 +435,7 @@ module board_specific_top
     //------------------------------------------------------------------------
 
     `ifdef INSTANTIATE_MICROPHONE_INTERFACE_MODULE
-
+      `ifndef USE_PRACTICAS_TOP
         inmp441_mic_i2s_receiver
         # (
             .clk_mhz  ( clk_mhz        )
@@ -424,7 +450,7 @@ module board_specific_top
             .sd       ( TF_MISO        ),
             .value    ( mic            )
         );
-
+      `endif
     `endif
 
     //------------------------------------------------------------------------

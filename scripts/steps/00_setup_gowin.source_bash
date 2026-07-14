@@ -330,14 +330,26 @@ setup_run_directory_for_fpga_synthesis_gowin ()
         then
             $find_to_run  \
                 "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
-                -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' \)  \
+                -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' -not -name '*_tmp.v' \)  \
                 | xargs -L 1 -I % echo "add_file -type verilog %"  \
+                >> "$dir/fpga_project.tcl"
+                
+            $find_to_run  \
+                "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
+                -type f \( -name '*.vhd' \)  \
+                | xargs -L 1 -I % echo "add_file -type vhdl %"  \
                 >> "$dir/fpga_project.tcl"
         else
             $find_to_run  \
                 "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
-                -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' \)  \
+                -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' -not -name '*_tmp.v' \)  \
                 -printf "add_file -type verilog %p\n"  \
+                >> "$dir/fpga_project.tcl"
+                
+            $find_to_run  \
+                "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
+                -type f \( -name '*.vhd' \)  \
+                -printf "add_file -type vhdl %p\n"  \
                 >> "$dir/fpga_project.tcl"
         fi
     done
@@ -363,14 +375,26 @@ setup_run_directory_for_fpga_synthesis_gowin ()
             then
                 $find_to_run  \
                     "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
-                    -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' \)  \
+                    -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' -not -name '*_tmp.v' \)  \
                     | xargs -L 1 -I % echo "        <File path=\"%\" type=\"file.verilog\" enable=\"1\"/>"  \
+                    >> "$dir/fpga_project.gprj"
+                    
+                $find_to_run  \
+                    "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
+                    -type f \( -name '*.vhd' \)  \
+                    | xargs -L 1 -I % echo "        <File path=\"%\" type=\"file.vhdl\" enable=\"1\"/>"  \
                     >> "$dir/fpga_project.gprj"
             else
                 $find_to_run  \
                     "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
-                    -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' \)  \
+                    -type f \( -name '*.sv' -not -name tb.sv -o -name '*.v' -not -name '*_tmp.v' \)  \
                     -printf "        <File path=\"%p\" type=\"file.verilog\" enable=\"1\"/>\n"  \
+                    >> "$dir/fpga_project.gprj"
+                    
+                $find_to_run  \
+                    "$(adj_path_for_gowin_win "$verilog_src_dir")"  \
+                    -type f \( -name '*.vhd' \)  \
+                    -printf "        <File path=\"%p\" type=\"file.vhdl\" enable=\"1\"/>\n"  \
                     >> "$dir/fpga_project.gprj"
             fi
         done

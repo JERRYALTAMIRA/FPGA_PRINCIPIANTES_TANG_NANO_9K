@@ -1,99 +1,151 @@
-// Práctica 14: Radar / Sensor de distancia ultrasónico
-// Concepto: Integrar un sensor de distancia ultrasónico (HC-SR04) y mostrar el valor de la distancia
-//           convertida a centímetros reales en el display de 7 segmentos, activando un LED de alerta.
+// Práctica 14: Logo de DVD rebotando en pantalla LCD (1 bit por píxel)
+// Concepto: Cargar una imagen monocromática de 256x128 píxeles desde una memoria ROM interna (Block RAM),
+//           calcular su movimiento y colisión contra los bordes físicos de la pantalla LCD de 480x272
+//           y cambiar dinámicamente de color con cada rebote.
 
 module practicas_top
 (
-    input  logic       clock,
+    input  logic       clock,       // 27 MHz desde la tarjeta
     input  logic       slow_clock,
-    input  logic       reset,
-
+    input  logic       reset,       // Botón de reset
+    
     input  logic [7:0] key,
     output logic [7:0] led,
-
     output logic [7:0] abcdefgh,
     output logic [7:0] digit,
+    
+    // UART
+    input  logic       uart_rx,
+    output logic       uart_tx,
 
+    // LCD 480x272
+    input  logic       lcd_clock,
+    input  logic       lcd_de,
     input  logic [8:0] x,
     input  logic [8:0] y,
     output logic [4:0] red,
     output logic [5:0] green,
     output logic [4:0] blue,
-
+    
     inout  logic [3:0] gpio,
 
-    input  logic       uart_rx,
-    output logic       uart_tx
+    // SD Card (Pines Físicos de la tarjeta)
+    output logic       sd_cs,
+    output logic       sd_sclk,
+    output logic       sd_mosi,
+    input  logic       sd_miso,
+
+    // Pines Físicos de la PSRAM (GW1NR-9)
+    output logic [1:0] O_psram_ck,
+    output logic [1:0] O_psram_ck_n,
+    inout  logic [1:0] IO_psram_rwds,
+    inout  logic [15:0] IO_psram_dq,
+    output logic [1:0] O_psram_reset_n,
+    output logic [1:0] O_psram_cs_n
 );
+
     // =================================================
     // 1. APAGAR PERIFÉRICOS NO UTILIZADOS
     // =================================================
-    // NOTA: ¡No apagues abcdefgh ni digit aquí! Son manejados por el módulo seven_segment_display más abajo.
-    // Poner un assign concurrente a cero generaría un error de compilación (Múltiple Driver).
-    assign red = 5'h00;
-    assign green = 6'h00;
-    assign blue = 5'h00;
-    assign uart_tx = 1'b1; // UART inactivo
-    
-    // Los GPIO se manejan según el sensor
+    assign led = 8'h00;
+    assign uart_tx = 1'b1; 
     assign gpio[3:2] = 2'bzz;
 
+    // Desactivar SD Card
+    assign sd_cs = 1'b1;
+    assign sd_sclk = 1'b0;
+    assign sd_mosi = 1'b1;
+
     // =================================================
-    // 2. SENSOR ULTRASÓNICO
+    // 2. LÓGICA DEL LOGO DVD
     // =================================================
-    wire [15:0] distance; // 16 bits de ancho para almacenar la cuenta
     
-    ultrasonic_distance_sensor
-    # (
-        .clk_frequency           ( 27 * 1000 * 1000 ),
-        .relative_distance_width ( 16 ) // Corregido de 15 a 16 para que coincida con el ancho del cable
-    )
-    i_sensor
-    (
-        .clk               ( clock    ),
-        .rst               ( reset    ),
-        .trig              ( gpio[0]  ),
-        .echo              ( gpio[1]  ),
-        .relative_distance ( distance )
+    localparam SCREEN_WIDTH  = 9'd480;
+    localparam SCREEN_HEIGHT = 9'd272;
+    localparam BITMAP_WIDTH  = 9'd256;
+    localparam BITMAP_HEIGHT = 9'd128;
+
+    logic frame;
+    logic pixel;
+    logic logo_viewport;
+    logic [9:0] x_viewport;
+    logic [9:0] y_viewport;
+
+    logic x_vel = 1;
+    logic y_vel = 1;
+    logic [8:0] x_pos = 9'd100;
+    logic [8:0] y_pos = 9'd50;
+    logic [2:0] color = 3'b001; // Color inicial (Rojo, Verde, Azul en bits)
+
+    // Detectar el inicio de un nuevo frame (cuando x e y vuelven a 0)
+    assign frame = (x == 0 && y == 0);
+
+    // Coordenadas relativas a la imagen
+    assign x_viewport = x - x_pos;
+    assign y_viewport = y - y_pos;
+    
+    // Saber si el pixel actual está dentro del cuadro del logo
+    assign logo_viewport = (x >= x_pos) &&
+                           (y >= y_pos) &&
+                           (x < (x_pos + BITMAP_WIDTH)) &&
+                           (y < (y_pos + BITMAP_HEIGHT));
+
+    // Instancia de la memoria ROM con el mapa de bits del logo de DVD (1 bit por pixel)
+    rom_bitmap #(
+        .ADDR_WIDTH(16),
+        .WIDTH(256),
+        .HEIGHT(128),
+        .BITMAP_PATH("bitmap.mem") // Ruta relativa donde se ejecutará la síntesis
+    ) dvd_logo (
+        .clk(lcd_clock),
+        .x(x_viewport),
+        .y(y_viewport),
+        .pixel(pixel)
     );
 
-    // =================================================
-    // 3. CONVERSIÓN A CENTÍMETROS REALES
-    // =================================================
-    // A la frecuencia de 27 MHz:
-    // ciclos_por_cm = (27,000,000 Hz * 2 (ida y vuelta del sonido)) / (343 m/s * 100 cm/m) ≈ 1574 ciclos/cm.
-    // Dado que el sensor nos devuelve 'distance' que equivale a (echo_cnt / 16) debido al escalado interno,
-    // la conversión a centímetros es:
-    // distancia_cm = (distance * 16) / 1574 = distance / 98.375.
-    // Aproximamos dividiendo entre 98.
-    logic [15:0] distance_cm;
-    assign distance_cm = distance / 16'd98;
+    // Movimiento y cambio de color del DVD en cada frame
+    always_ff @ (posedge lcd_clock) begin
+        if (reset) begin
+            x_pos <= 9'd100;
+            y_pos <= 9'd50;
+            x_vel <= 1;
+            y_vel <= 1;
+            color <= 3'b001;
+        end else if (frame) begin
+            // Rebotar en los bordes y rotar color
+            if (x_pos == 0) begin
+                color <= {color[1:0], color[2]};
+                x_vel <= 1;
+            end
+            if (x_pos == (SCREEN_WIDTH - BITMAP_WIDTH)) begin
+                color <= {color[1:0], color[2]};
+                x_vel <= 0;
+            end
+            if (y_pos == 0) begin
+                color <= {color[1:0], color[2]};
+                y_vel <= 1;
+            end
+            if (y_pos == (SCREEN_HEIGHT - BITMAP_HEIGHT)) begin
+                color <= {color[1:0], color[2]};
+                y_vel <= 0;
+            end
+            
+            // Actualizar posiciones
+            x_pos <= x_vel ? (x_pos + 1'b1) : (x_pos - 1'b1);
+            y_pos <= y_vel ? (y_pos + 1'b1) : (y_pos - 1'b1);
+        end
+    end
 
-    // =================================================
-    // 4. MOSTRAR DISTANCIA EN DISPLAY 7 SEGMENTOS
-    // =================================================
-    seven_segment_display
-    # (.w_digit (8))
-    i_7segment
-    (
-        .clk      ( clock               ),
-        .rst      ( reset               ),
-        .number   ( 32'(distance_cm)    ), // Muestra la distancia en centímetros reales
-        .dots     ( 8'b00000000         ),
-        .abcdefgh ( abcdefgh            ), // Único driver de los segmentos
-        .digit    ( digit               )  // Único driver de la habilitación de dígitos
-    );
-
-    // =================================================
-    // 5. LEDs INDICADORES (Alerta de proximidad)
-    // =================================================
+    // Asignación de colores al LCD (RGB565 convertido a 5-6-5 pines)
     always_comb begin
-        // Por defecto todos los LEDs apagados
-        led = 8'b00000000;
-        
-        // Alerta si la distancia medida en cm es inferior a 30 cm
-        if (distance_cm < 16'd30) begin
-            led[0] = 1'b1; // Enciende LED 0 si está muy cerca
+        if (lcd_de && logo_viewport && pixel) begin
+            red   = color[0] ? 5'b11111 : 5'd0;
+            green = color[1] ? 6'b111111 : 6'd0;
+            blue  = color[2] ? 5'b11111 : 5'd0;
+        end else begin
+            red   = 5'd0;
+            green = 6'd0;
+            blue  = 5'd0;
         end
     end
 
